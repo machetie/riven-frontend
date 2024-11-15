@@ -1,12 +1,57 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import Header from '$lib/components/header.svelte';
-	import { Star } from 'lucide-svelte';
+	import { Star, CirclePower, RotateCcw } from 'lucide-svelte';
 	import { formatDate } from '$lib/helpers';
 	import { statesName } from '$lib/constants';
+	import { ItemsService } from '$lib/client';
+	import { toast } from 'svelte-sonner';
 
 	export let data: PageData;
+
+	let selectedEpisodeNumber: number | null = null;
+
+	async function resetItem(id: string) {
+		const response = await ItemsService.resetItems({
+			query: {
+				ids: id.toString()
+			}
+		});
+
+		if (!response.error) {
+			toast.success('Media reset successfully');
+			selectedEpisodeNumber = null;
+			invalidateAll();
+		} else {
+			toast.error('An error occurred while resetting the media');
+		}
+	}
+
+	async function retryItem(id: string) {
+		const response = await ItemsService.retryItems({
+			query: {
+				ids: id.toString()
+			}
+		});
+
+		if (!response.error) {
+			toast.success('Media retried successfully');
+			selectedEpisodeNumber = null;
+			invalidateAll();
+		} else {
+			toast.error('An error occurred while retrying the media');
+		}
+	}
+
+	function handleClickOutside(event: MouseEvent) {
+		const target = event.target as HTMLElement;
+		if (!target.closest('.episode-card')) {
+			selectedEpisodeNumber = null;
+		}
+	}
 </script>
+
+<svelte:window on:click={handleClickOutside} />
 
 <svelte:head>
 	<title>{data.details.name} | {data.mediaDetails.name || data.mediaDetails.original_name}</title>
@@ -75,14 +120,18 @@
 
 					<div class="relative flex w-full cursor-pointer flex-wrap">
 						{#each data.details.episodes as episode}
-							<div class="group relative aspect-[2/1] h-fit w-full p-2 sm:w-1/2 xl:w-1/3">
+							<div
+								class="episode-card group relative aspect-[2/1] h-fit w-full p-2 sm:w-1/2 xl:w-1/3"
+								on:click={() => (selectedEpisodeNumber = episode.episode_number)}
+							>
 								<div class="h-full w-full overflow-hidden rounded-lg bg-white/10 shadow-xl">
 									<img
 										alt={episode.id}
 										src={episode.still_path
 											? `https://www.themoviedb.org/t/p/w780${episode.still_path}`
 											: 'https://via.placeholder.com/198x228.png?text=No+thumbnail'}
-										class=" h-full w-full object-cover brightness-75 transition-all duration-300 ease-in-out group-hover:scale-105"
+										class="h-full w-full object-cover brightness-75 transition-all duration-300 ease-in-out"
+										class:blur-sm={selectedEpisodeNumber === episode.episode_number}
 										loading="lazy"
 									/>
 									<div class="absolute left-0 top-0 flex h-full w-full flex-col px-4 py-3">
@@ -91,6 +140,29 @@
 										>
 											Episode {episode.episode_number}
 										</div>
+
+										<!-- Action buttons - only show when episode is selected -->
+										{#if selectedEpisodeNumber === episode.episode_number && data.mediaItemDetails.find((x) => x.number == episode.episode_number)}
+											<div
+												class="absolute inset-0 flex items-center justify-center gap-4 bg-black/40"
+											>
+												<button
+													class="flex items-center gap-2 rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
+													on:click|stopPropagation={() => resetItem(data.mediaID)}
+												>
+													<CirclePower class="size-4" />
+													Reset
+												</button>
+												<button
+													class="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+													on:click|stopPropagation={() => retryItem(data.mediaID)}
+												>
+													<RotateCcw class="size-4" />
+													Retry
+												</button>
+											</div>
+										{/if}
+
 										<div class="mt-auto flex w-full justify-between">
 											{#if data.mediaItemDetails.find((x) => x.number == episode.episode_number)}
 												<div
